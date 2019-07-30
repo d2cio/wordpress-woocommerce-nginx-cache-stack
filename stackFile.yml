@@ -1,0 +1,106 @@
+version: '1.0'
+services:
+  - name: db
+    type: mariadb
+    version: 10.4
+    configuration: StandAlone
+    database: wordpress
+    username: wordpress
+    userPassword: null
+    password: null
+    ports:
+      - 3306
+    remoteAccess: false
+    deployTo:
+      - mainwp
+
+  - name: cache
+    type: redis
+    version: 5.0
+    remoteAccess: false
+    ports:
+      - 6379
+    deployTo:
+      - mainwp
+
+  - name: blog
+    type: docker
+    image: d2cio/wordpress
+    version: latest
+    volumes:
+      - directory: $MAIN_PATH/wp-content/uploads
+        sync: true
+      - directory: $MAIN_PATH/wp-content/themes
+        sync: true
+      - directory: $MAIN_PATH/wp-content/plugins
+        sync: true
+    ports:
+      - 80
+    remoteAccess: false
+    configFiles:
+      - dest: $MAIN_PATH/wp-config.php
+        src: ./configs/wp-config.php
+      - dest: $MAIN_PATH/db-config.php
+        src: ./configs/db-config.php
+      - dest: $MAIN_PATH/wp-content/db.php
+        src: ./configs/db.php
+      - dest: /usr/local/etc/php/php.ini
+        src: ./configs/php.ini
+      - dest: /etc/nginx/conf.d/default.conf
+        src: ./configs/default.conf
+    localDeps: |
+      cmd extract
+    initialCommands: |
+      cmd wp core install --url={{=service('blog').getBalancerDomain()}} --title='"$WP_TITLE"' --admin_user=$WP_ADMIN_USERNAME --admin_password=$WP_ADMIN_PASSWORD --admin_email=$WP_ADMIN_EMAIL --path=/var/www/{{=service('blog').get('name')}}
+      cmd wp plugin install redis-cache --activate --path=/var/www/{{=service('blog').get('name')}}
+      cmd wp redis enable --path=/var/www/{{=service('blog').get('name')}}
+      cmd wp plugin install nginx-helper --activate --path=/var/www/{{=service('blog').get('name')}}
+      cmd wp plugin install woocommerce --activate --path=/var/www/{{=service('blog').get('name')}}
+      cmd wp theme install storefront --activate --path=/var/www/blog
+      echo '{"enable_purge":"1","cache_method":"enable_fastcgi","purge_method":"unlink_files","enable_map":null,"enable_log":null,"log_level":"INFO","log_filesize":"5","enable_stamp":null,"purge_homepage_on_edit":"1","purge_homepage_on_del":"1","purge_archive_on_edit":"1","purge_archive_on_del":"1","purge_archive_on_new_comment":null,"purge_archive_on_deleted_comment":null,"purge_page_on_mod":"1","purge_page_on_new_comment":"1","purge_page_on_deleted_comment":"1","redis_hostname":"{{=service('cache').getAppAlias()}}","redis_port":"6379","redis_prefix":"nginx-cache:","purge_url":"","redis_enabled_by_constant":0}' | cmd wp option add rt_wp_nginx_helper_options --format=json --path=/var/www/{{=service('blog').get('name')}}
+    env:
+      SERVICE_NAME: "{{=service('blog').get('name')}}"
+      WP_TITLE: null
+      WP_ADMIN_USERNAME: null
+      WP_ADMIN_PASSWORD: null
+      WP_ADMIN_EMAIL: null
+    comments:
+      env:
+        WP_TITLE: The title of your Wordpress website
+        WP_ADMIN_USERNAME: Username of administrator account
+        WP_ADMIN_PASSWORD: Password of administrator account
+        WP_ADMIN_EMAIL: Email of administrator account
+    volumesUID: 33
+    deployTo:
+      - mainwp
+
+  - name: balancer
+    type: haproxy
+    version: latest
+    ports:
+      - 80
+      - 443
+    remoteAccess: true
+    serviceFiles:
+      - name: blog
+        sticky: true
+    deployTo:
+      - mainwp
+
+  - name: adminer
+    type: docker
+    image: adminer
+    version: latest
+    ports:
+      - 8080
+    remoteAccess: true
+    env:
+      ADMINER_DEFAULT_SERVER: "{{=service('db').getMasterAlias()}}"
+    deployTo:
+      - mainwp
+
+hosts:
+  - name: mainwp
+    requirements:
+      cores: 1
+      memory: 2
