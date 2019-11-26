@@ -74,19 +74,6 @@ services:
     deployTo:
       - mainwp
 
-  - name: balancer
-    type: haproxy
-    version: latest
-    ports:
-      - 80
-      - 443
-    remoteAccess: true
-    serviceFiles:
-      - name: blog
-        sticky: true
-    deployTo:
-      - mainwp
-
   - name: adminer
     type: docker
     image: adminer
@@ -96,6 +83,19 @@ services:
     remoteAccess: true
     env:
       ADMINER_DEFAULT_SERVER: "{{=service('db').getMasterAlias()}}"
+    deployTo:
+      - mainwp
+
+  - name: web
+    type: nginx
+    version: 1.17
+    ports:
+      - 80
+      - 443
+    remoteAccess: true
+    serviceFiles:
+      - name: blog
+      - name: adminer
     deployTo:
       - mainwp
 

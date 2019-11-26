@@ -1,4 +1,4 @@
-# WooCommerce Light stack with NGINX cache, optimized WP Docker image for using with Git. One-click deploy in D2C.io
+# WooCommerce stack with NGINX cache, optimized WP Docker image for using with Git. One-click deploy in D2C.io
 
 ## How to deploy a stack
 
